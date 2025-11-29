@@ -5,7 +5,7 @@ import {
   Briefcase, Users, Menu, X, MapPin, DollarSign, 
   Send, CheckCircle, Search, Building, ShieldCheck, 
   UserCircle, Briefcase as BriefcaseIcon, Lock, 
-  AlertTriangle, Check, UserCog
+  AlertTriangle, Check, UserCog, LogOut, ArrowLeft
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -14,11 +14,11 @@ import {
   doc, setDoc, updateDoc 
 } from "firebase/firestore";
 import { 
-  signInAnonymously, onAuthStateChanged, signInWithCustomToken 
+  signInAnonymously, onAuthStateChanged, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword
 } from "firebase/auth";
 
-// Import initialized instances from your lib file
-// Make sure src/lib/firebase.js exists!
+// Import initialized instances
 import { db, auth, appId } from '@/lib/firebase';
 
 // --- STATIC DATA ---
@@ -61,12 +61,75 @@ const COURSES = [
   }
 ];
 
-// --- SUB-COMPONENTS ---
+// --- COMPONENTS ---
 
 const LoginSelection = ({ onLogin }) => {
+  const [view, setView] = useState('selection'); // 'selection', 'admin', 'company-auth'
+  const [adminCode, setAdminCode] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Company Auth State
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Woman / Job Seeker (Anonymous)
+  const handleWomanLogin = async () => {
+    setIsLoading(true);
+    try {
+      await signInAnonymously(auth);
+      onLogin('woman');
+    } catch (err) {
+      console.error(err);
+      setError("Login failed. Please try again.");
+    }
+    setIsLoading(false);
+  };
+
+  // Company Login/Register
+  const handleCompanyAuth = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      if (authMode === 'register') {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+      onLogin('company');
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setError("Email/Password auth not enabled in Firebase Console.");
+      } else if (err.code === 'auth/invalid-credential') {
+        setError("Invalid email or password.");
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError("Email already in use. Try logging in.");
+      } else {
+        setError(err.message);
+      }
+    }
+    setIsLoading(false);
+  };
+
+  // Admin Login
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    if (adminCode === 'admin123') {
+      setIsLoading(true);
+      await onLogin('admin');
+      setIsLoading(false);
+    } else {
+      setError('Invalid Access Code');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-teal-50 flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fadeIn relative">
+      <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fadeIn relative min-h-[500px]">
         
         {/* Left Side: Branding */}
         <div className="md:w-1/2 bg-purple-700 p-12 text-white flex flex-col justify-center items-center text-center">
@@ -75,44 +138,138 @@ const LoginSelection = ({ onLogin }) => {
           <div className="w-32 h-1 bg-teal-400 rounded-full"></div>
         </div>
 
-        {/* Right Side: Selection */}
+        {/* Right Side: Dynamic Forms */}
         <div className="md:w-1/2 p-12 flex flex-col justify-center">
-          <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">Continue As</h2>
           
-          <div className="space-y-4">
-            <button 
-              onClick={() => onLogin('woman')}
-              className="w-full group p-6 border-2 border-purple-100 rounded-2xl hover:border-purple-600 hover:bg-purple-50 transition-all duration-300 flex items-center gap-4 text-left"
-            >
-              <div className="bg-purple-100 p-4 rounded-full group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                <UserCircle size={32} />
-              </div>
-              <div>
-                <h3 className="font-bold text-xl text-gray-900">Woman / Job Seeker</h3>
-                <p className="text-sm text-gray-500">Find jobs, upskill, and grow.</p>
-              </div>
-            </button>
+          {/* VIEW: ROLE SELECTION */}
+          {view === 'selection' && (
+            <div className="animate-fadeIn">
+              <h2 className="text-3xl font-bold text-gray-800 mb-2 text-center">Welcome</h2>
+              <p className="text-center text-gray-500 mb-8 text-sm">Select your role to continue</p>
+              
+              <div className="space-y-4">
+                <button 
+                  onClick={handleWomanLogin}
+                  disabled={isLoading}
+                  className="w-full group p-6 border-2 border-purple-100 rounded-2xl hover:border-purple-600 hover:bg-purple-50 transition-all duration-300 flex items-center gap-4 text-left disabled:opacity-50"
+                >
+                  <div className="bg-purple-100 p-4 rounded-full group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    <UserCircle size={32} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xl text-gray-900">Woman / Job Seeker</h3>
+                    <p className="text-sm text-gray-500">Find jobs, upskill, and grow.</p>
+                  </div>
+                </button>
 
-            <button 
-              onClick={() => onLogin('company')}
-              className="w-full group p-6 border-2 border-teal-100 rounded-2xl hover:border-teal-600 hover:bg-teal-50 transition-all duration-300 flex items-center gap-4 text-left"
-            >
-              <div className="bg-teal-100 p-4 rounded-full group-hover:bg-teal-600 group-hover:text-white transition-colors">
-                <Building size={32} />
+                <button 
+                  onClick={() => setView('company-auth')}
+                  className="w-full group p-6 border-2 border-teal-100 rounded-2xl hover:border-teal-600 hover:bg-teal-50 transition-all duration-300 flex items-center gap-4 text-left"
+                >
+                  <div className="bg-teal-100 p-4 rounded-full group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                    <Building size={32} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xl text-gray-900">Company / Employer</h3>
+                    <p className="text-sm text-gray-500">Post jobs and find talent.</p>
+                  </div>
+                </button>
+                
+                <button 
+                  onClick={() => setView('admin')}
+                  className="w-full mt-4 text-center text-xs text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1"
+                >
+                  <UserCog size={12} /> Admin Login
+                </button>
               </div>
-              <div>
-                <h3 className="font-bold text-xl text-gray-900">Company / Employer</h3>
-                <p className="text-sm text-gray-500">Post jobs and find talent.</p>
+            </div>
+          )}
+
+          {/* VIEW: COMPANY AUTH (Login/Register) */}
+          {view === 'company-auth' && (
+            <div className="animate-fadeIn w-full">
+              <button onClick={() => { setView('selection'); setError(''); }} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
+                 <ArrowLeft size={14} /> Back to Roles
+              </button>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Company Portal</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                {authMode === 'login' ? 'Log in to manage your jobs.' : 'Register to verify your company.'}
+              </p>
+              
+              <form onSubmit={handleCompanyAuth} className="space-y-4">
+                <div>
+                  <label className="label text-gray-700">Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field text-gray-900 bg-white" 
+                    placeholder="hr@company.com"
+                  />
+                </div>
+                <div>
+                  <label className="label text-gray-700">Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="input-field text-gray-900 bg-white" 
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                {error && <p className="text-red-500 text-sm font-medium bg-red-50 p-2 rounded">{error}</p>}
+                
+                <button type="submit" disabled={isLoading} className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition shadow-lg disabled:opacity-50">
+                  {isLoading ? 'Processing...' : (authMode === 'login' ? 'Login' : 'Create Account')}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center text-sm">
+                {authMode === 'login' ? (
+                  <p className="text-gray-600">
+                    New here? <button onClick={() => { setAuthMode('register'); setError(''); }} className="text-teal-600 font-bold hover:underline">Create an account</button>
+                  </p>
+                ) : (
+                  <p className="text-gray-600">
+                    Already have an account? <button onClick={() => { setAuthMode('login'); setError(''); }} className="text-teal-600 font-bold hover:underline">Log in</button>
+                  </p>
+                )}
               </div>
-            </button>
-            
-            <button 
-              onClick={() => onLogin('admin')}
-              className="w-full mt-4 text-center text-xs text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1"
-            >
-              <UserCog size={12} /> Admin Login
-            </button>
-          </div>
+            </div>
+          )}
+
+          {/* VIEW: ADMIN LOGIN */}
+          {view === 'admin' && (
+            <div className="animate-fadeIn w-full">
+              <button onClick={() => { setView('selection'); setError(''); }} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
+                 <ArrowLeft size={14} /> Back to Roles
+              </button>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Access</h2>
+              <p className="text-sm text-gray-500 mb-6">Enter the verification code (admin123)</p>
+              
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div>
+                  <label className="label text-gray-700">Access Code</label>
+                  <input 
+                    type="password" 
+                    value={adminCode}
+                    onChange={(e) => setAdminCode(e.target.value)}
+                    className="input-field text-gray-900 bg-white" 
+                    placeholder="Enter code"
+                    autoFocus
+                    autoComplete="off"
+                  />
+                </div>
+                {error && <p className="text-red-500 text-sm font-medium bg-red-50 p-2 rounded">{error}</p>}
+                <button type="submit" disabled={isLoading} className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-black transition shadow-lg disabled:opacity-50">
+                  {isLoading ? 'Verifying...' : 'Enter Dashboard'}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
       </div>
@@ -178,8 +335,8 @@ const Navbar = ({ setPage, currentPage, userRole, companyStatus, onLogout }) => 
                 {item.name}
               </button>
             ))}
-            <button onClick={onLogout} className="text-red-500 hover:text-red-700 text-sm font-medium ml-4">
-              Sign Out
+            <button onClick={onLogout} className="text-red-500 hover:text-red-700 text-sm font-medium ml-4 flex items-center gap-1">
+              <LogOut size={16}/> Sign Out
             </button>
           </div>
 
@@ -218,7 +375,6 @@ const ContactForm = () => {
     setFormStatus('submitting');
     
     const formData = new FormData(e.target);
-    // Replace with your Web3Forms Access Key
     formData.append("access_key", "195725f0-3a18-4f09-a0dc-d6921f302cd3"); 
 
     try {
@@ -778,11 +934,17 @@ export default function Home() {
 
   // --- AUTH & DATA ---
   useEffect(() => {
-    const initAuth = async () => {
-      // Simple anonymous sign-in for hackathon demo purposes
-      await signInAnonymously(auth);
-    };
-    initAuth();
+    // Check LocalStorage on Mount
+    const savedRole = localStorage.getItem('userRole');
+    if (savedRole) {
+      setUserRole(savedRole);
+      // NOTE: We do NOT strictly sign in anonymously here anymore
+      // because companies use real auth.
+      // If a role is saved but auth is missing, we let onAuthStateChanged handle it
+      // or redirect to login if necessary.
+    }
+    
+    // Listen for Auth State
     return onAuthStateChanged(auth, setUser);
   }, []);
 
@@ -817,13 +979,22 @@ export default function Home() {
   }, [user, userRole]);
 
 
-  const handleLogin = (role) => {
+  const handleLogin = async (role) => {
+    // Note: Login logic is handled inside LoginSelection components now
+    // This just sets state
     setUserRole(role);
+    localStorage.setItem('userRole', role); // Save to LocalStorage
     setCurrentPage('home');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth); // Clear Firebase Session
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
     setUserRole(null);
+    localStorage.removeItem('userRole'); // Clear from LocalStorage
     setCurrentPage('home');
     setCompanyStatus('unverified');
   };
